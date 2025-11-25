@@ -26,7 +26,7 @@ export default function App() {
   const [theme, setTheme] = useState(localStorage.getItem('theme')||'light')
   useEffect(()=>{ document.documentElement.setAttribute('data-theme', theme); localStorage.setItem('theme', theme) },[theme])
   return (
-    <BrowserRouter>
+    <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
       <Header theme={theme} setTheme={setTheme} />
       <Routes>
         <Route path="/" element={<Home />} />

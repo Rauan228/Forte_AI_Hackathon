@@ -38,6 +38,12 @@ class RequirementDocument(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     session = relationship("DialogSession", back_populates="document")
 
+class SessionContextState(Base):
+    __tablename__ = "session_contexts"
+    session_id = Column(String, primary_key=True, index=True)
+    slots_json = Column(Text)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
 def init_db():
     Base.metadata.create_all(bind=engine)
 

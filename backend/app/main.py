@@ -7,6 +7,8 @@ from .models import SessionLocal, init_db, DialogSession, Message, RequirementDo
 from .schemas import ChatMessage, ChatReply, FinishRequest, DocumentResponse, HistoryResponse, HistoryItem
 from .schemas import SessionsResponse, SessionItem
 from .ai.model import AIModel
+from .ai.session_logic import SessionContextStore, SessionContext, plan_next_question, extract_slots_from_history
+from .ai.generators import generate_brd_markdown
 from .config import FRONTEND_ORIGIN
 from .integrations.confluence import publish_to_confluence
 
@@ -44,10 +46,42 @@ def chat_message(payload: ChatMessage, db: Session = Depends(get_db)):
         db.commit()
     db.add(Message(session_id=session_id, sender="user", text=payload.message))
     history = [(m.sender, m.text) for m in db.query(Message).filter(Message.session_id == session_id).order_by(Message.timestamp.asc()).all()]
-    reply = ai.reply(history, payload.message)
-    db.add(Message(session_id=session_id, sender="assistant", text=reply))
+    store = SessionContextStore(db)
+    ctx = store.get(session_id)
+    reply_text, delta, ready = ai.reply_and_slots(history, payload.message, ctx.slots)
+    if not isinstance(delta, dict) or len(delta.keys()) == 0:
+        try:
+            delta = ai._local_extract_slots(payload.message)
+        except Exception:
+            delta = {}
+    ctx.update(delta)
+    extra = extract_slots_from_history(history)
+    if extra:
+        ctx.update(extra)
+    store.save(session_id, ctx)
+    db.add(Message(session_id=session_id, sender="assistant", text=reply_text))
+    finished = False
+    if ctx.is_complete():
+        title = "Бизнес-требования"
+        content_md = ai.generate_document_from_slots(ctx.slots, title)
+        content_html = md.convert(content_md)
+        url = publish_to_confluence(title, content_html)
+        doc = db.query(RequirementDocument).filter(RequirementDocument.session_id == session_id).one_or_none()
+        if not doc:
+            doc = RequirementDocument(session_id=session_id)
+            db.add(doc)
+        doc.title = title
+        doc.content_markdown = content_md
+        doc.content_html = content_html
+        doc.confluence_url = url
+        session.finished = True
+        finished = True
+    else:
+        if not delta or not reply_text:
+            q = plan_next_question(ctx)
+            db.add(Message(session_id=session_id, sender="assistant", text=q))
     db.commit()
-    return {"session_id": session_id, "reply": reply, "finished": False}
+    return {"session_id": session_id, "reply": reply_text, "finished": finished}
 
 @app.get("/chat/history/{session_id}", response_model=HistoryResponse)
 def get_history(session_id: str, db: Session = Depends(get_db)):
@@ -67,9 +101,19 @@ def chat_finish(payload: FinishRequest, db: Session = Depends(get_db)):
         db.commit()
     history = [(m.sender, m.text) for m in db.query(Message).filter(Message.session_id == sid).order_by(Message.timestamp.asc()).all()]
     title = payload.title or "Бизнес-требования"
-    content_md = ai.generate_document(history, title)
-    content_html = md.convert(content_md)
-    url = publish_to_confluence(title, content_html)
+    store = SessionContextStore(db)
+    ctx = store.get(sid)
+    content_md = ai.generate_document_from_slots(ctx.slots, title)
+    if not content_md:
+        content_md = generate_brd_markdown(ctx, title)
+    try:
+        content_html = md.convert(content_md)
+    except Exception:
+        content_html = md.convert(str(content_md or ""))
+    try:
+        url = publish_to_confluence(title, content_html)
+    except Exception:
+        url = None
     doc = db.query(RequirementDocument).filter(RequirementDocument.session_id == sid).one_or_none()
     if not doc:
         doc = RequirementDocument(session_id=sid)
@@ -81,6 +125,12 @@ def chat_finish(payload: FinishRequest, db: Session = Depends(get_db)):
     session.finished = True
     db.commit()
     return {"session_id": sid, "title": title, "content_markdown": content_md, "confluence_url": url}
+
+@app.get("/context/{session_id}")
+def get_context(session_id: str, db: Session = Depends(get_db)):
+    store = SessionContextStore(db)
+    ctx = store.get(session_id)
+    return {"session_id": session_id, "slots": ctx.slots}
 
 @app.get("/sessions", response_model=SessionsResponse)
 def list_sessions(db: Session = Depends(get_db)):
