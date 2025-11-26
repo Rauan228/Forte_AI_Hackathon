@@ -69,3 +69,22 @@ body {
   .doc-panel { width: 100%; border-left:none; border-top: 1px solid var(--border); }
   .chat-wrap { flex-direction: column; }
 }
+
+/* Markdown document styles */
+.markdown-body { font-size: 15px; line-height: 1.6; }
+.markdown-body h1 { font-size: 22px; margin: 16px 0 10px; }
+.markdown-body h2 { font-size: 18px; margin: 14px 0 8px; border-bottom: 1px solid var(--border); padding-bottom: 4px; }
+.markdown-body h3 { font-size: 16px; margin: 12px 0 6px; }
+.markdown-body p { margin: 8px 0; }
+.markdown-body ul, .markdown-body ol { margin: 8px 0 8px 18px; }
+.markdown-body li { margin: 4px 0; }
+.markdown-body table { border-collapse: collapse; width: 100%; margin: 10px 0; }
+.markdown-body th, .markdown-body td { border: 1px solid var(--border); padding: 6px 8px; }
+.markdown-body thead th { background: var(--bubble-bot); }
+.markdown-body code { background: rgba(0,0,0,.06); border-radius: 4px; padding: 2px 4px; }
+.markdown-body pre { background: var(--bubble-bot); border: 1px solid var(--border); padding: 8px; border-radius: 8px; overflow: auto; }
+.markdown-body blockquote { border-left: 3px solid var(--border); margin: 8px 0; padding: 4px 8px; color: #6b7280; }
+.markdown-body hr { border: none; border-top: 1px solid var(--border); margin: 12px 0; }
+.mermaid-chart { background: var(--bubble-bot); border: 1px solid var(--border); border-radius: 8px; padding: 12px; overflow: auto; max-height: 520px; }
+.mermaid-chart svg { display:block; max-width:100%; height:auto; margin:auto; }
+.mermaid-chart .error-icon, .mermaid-chart .error-text { display: none !important; }

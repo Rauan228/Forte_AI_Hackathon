@@ -111,14 +111,19 @@ def default_leading_indicators(ctx: SessionContext):
 
 def default_mermaid(ctx: SessionContext):
     return (
-        "flowchart TD\n"
+        "flowchart LR\n"
+        "subgraph Заказчик\n"
         "A[Старт интервью] --> B[Сбор ответов]\n"
+        "end\n"
+        "subgraph Система\n"
         "B --> C{Достаточно данных?}\n"
         "C -->|нет| D[Уточнить ошибки]\n"
-        "D --> B\n"
         "C -->|да| E[Генерация артефактов]\n"
+        "end\n"
+        "subgraph Аналитик\n"
         "E --> F[Проверка качества]\n"
         "F --> G[Выдача BRD]\n"
+        "end\n"
     )
 
 
