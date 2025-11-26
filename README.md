@@ -1,10 +1,10 @@
 # Forte AI Assistant — Полная документация и инициализация
 
 ## Описание
-Интерактивная платформа для сбора и формализации бизнес‑требований: чат с ИИ‑ассистентом, генерация BRD (цель, описание, scope, бизнес‑правила, KPI), артефакты (Use Case, user stories, диаграммы), публикация в Confluence.
+Интерактивная платформа для сбора и формализации бизнес‑требований: чат с ИИ‑ассистентом, генерация BRD (цель, описание, scope, бизнес‑правила, KPI), артефакты (Use Case, user stories, диаграммы) и автоматический экспорт в Confluence.
 
 ## Архитектура
-- Backend: FastAPI, SQLAlchemy, Markdown→HTML, интеграция с Confluence.
+- Backend: FastAPI, SQLAlchemy, Markdown→HTML, интеграция с Confluence (REST API).
 - AI: переключаемый провайдер (Gemini по `GEMINI_API_KEY`, OpenAI по `OPENAI_API_KEY`, иначе Mock).
 - Frontend: React + Vite, Router, чат, превью документа, экспорт/скачивание PDF, темы.
 - DB: SQLite по умолчанию, поддержка PostgreSQL.
@@ -45,7 +45,7 @@ npm run dev
 ## Использование
 - Главная `/`: кнопка «Начать сессию».
 - Чат `/session/new` → автоматический редирект на `/session/:id` после первого сообщения.
-- «Завершить и сгенерировать»: формирует документ и (если настроено окружение) публикует в Confluence.
+- «Завершить и сгенерировать»: формирует документ и сохраняет его в системе, а при настроенной интеграции публикует страницу в Confluence.
 - «Скачать PDF»: выгружает текущий документ.
 - «Мои сессии»: список сессий, открыть/удалить.
 
@@ -56,7 +56,7 @@ npm run dev
 - `GET /chat/history/{session_id}` — история диалога.
 - `POST /chat/finish` — сгенерировать документ, сохранить и опубликовать в Confluence.
   - Вход: `{"session_id":"опц.", "title":"опц."}`
-  - Выход: `{"session_id":"...","title":"...","content_markdown":"...","confluence_url":"опц."}`
+  - Выход: `{"session_id":"...","title":"...","content_markdown":"...","confluence_url":"..."}`
 - `GET /sessions` — список сессий.
 - `DELETE /sessions/{id}` — удалить сессию.
 - `GET /document/{session_id}` — получить сохранённый документ.
@@ -67,8 +67,8 @@ npm run dev
   - `backend/app/ai/model.py` — провайдеры ИИ, системный промпт, фолбэк.
   - `backend/app/models.py` — модели БД (`DialogSession`, `Message`, `RequirementDocument`).
   - `backend/app/schemas.py` — Pydantic‑схемы запросов/ответов.
-  - `backend/app/integrations/confluence.py` — публикация страницы через REST (storage format).
   - `backend/app/config.py` — загрузка `.env`, ключи, CORS.
+  - `backend/app/integrations/confluence.py` — публикация страницы через REST (storage format).
 - Frontend
   - `frontend/src/App.jsx` — Router, Header, темы.
   - `frontend/src/pages/Home.jsx` — презентационный экран.
@@ -77,13 +77,13 @@ npm run dev
   - `frontend/src/styles.css` — палитра, темы, анимации, шиммер, типинг.
   - `frontend/src/api.js` — API‑клиент.
 
+## Интеграция Confluence
+- Установите переменные `CONFLUENCE_URL`, `CONFLUENCE_EMAIL`, `CONFLUENCE_API_TOKEN`, `CONFLUENCE_SPACE_KEY`, `CONFLUENCE_PARENT_PAGE_ID` (опционально).
+- После `/chat/finish` документ публикуется; в ответе и в UI появится ссылка `confluence_url`.
+
 ## Настройка ИИ
 - Приоритет: если установлен `GEMINI_API_KEY`, используется Gemini. Если Gemini недоступен на вашей учётке или даёт ошибку модели — выполняется фолбэк на OpenAI (если есть ключ) или Mock.
 - Системный промпт настроен на сбор структуры требований: цель, описание, scope, бизнес‑правила, KPI, Use Case, user stories, диаграмма (текст), leading indicators.
-
-## Интеграция Confluence
-- Установите в `.env`: `CONFLUENCE_URL`, `CONFLUENCE_EMAIL`, `CONFLUENCE_API_TOKEN`, `CONFLUENCE_SPACE_KEY`, `CONFLUENCE_PARENT_PAGE_ID` (опц.)
-- После `/chat/finish` документ публикуется; в ответе вернётся `confluence_url`.
 
 ## База данных
 - SQLite по умолчанию: `sqlite:///./dev.db`

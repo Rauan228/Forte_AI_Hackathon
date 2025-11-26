@@ -7,7 +7,7 @@ from .models import SessionLocal, init_db, DialogSession, Message, RequirementDo
 from .schemas import ChatMessage, ChatReply, FinishRequest, DocumentResponse, HistoryResponse, HistoryItem
 from .schemas import SessionsResponse, SessionItem
 from .ai.model import AIModel
-from .ai.session_logic import SessionContextStore, SessionContext, plan_next_question, extract_slots_from_history
+from .ai.session_logic import SessionContextStore, plan_next_question, extract_slots_from_history
 from .ai.generators import generate_brd_markdown
 from .config import FRONTEND_ORIGIN
 from .integrations.confluence import publish_to_confluence
@@ -30,7 +30,7 @@ def get_db():
         db.close()
 
 ai = AIModel()
-md = Markdown()
+md = Markdown(extras=["tables", "fenced-code-blocks"])
 
 @app.get("/health")
 def health():
@@ -59,13 +59,19 @@ def chat_message(payload: ChatMessage, db: Session = Depends(get_db)):
     if extra:
         ctx.update(extra)
     store.save(session_id, ctx)
+    if not reply_text:
+        reply_text = plan_next_question(ctx)
+
     db.add(Message(session_id=session_id, sender="assistant", text=reply_text))
     finished = False
     if ctx.is_complete():
         title = "Бизнес-требования"
         content_md = ai.generate_document_from_slots(ctx.slots, title)
         content_html = md.convert(content_md)
-        url = publish_to_confluence(title, content_html)
+        try:
+            url = publish_to_confluence(title, content_html)
+        except Exception:
+            url = None
         doc = db.query(RequirementDocument).filter(RequirementDocument.session_id == session_id).one_or_none()
         if not doc:
             doc = RequirementDocument(session_id=session_id)
@@ -76,10 +82,6 @@ def chat_message(payload: ChatMessage, db: Session = Depends(get_db)):
         doc.confluence_url = url
         session.finished = True
         finished = True
-    else:
-        if not delta or not reply_text:
-            q = plan_next_question(ctx)
-            db.add(Message(session_id=session_id, sender="assistant", text=q))
     db.commit()
     return {"session_id": session_id, "reply": reply_text, "finished": finished}
 
@@ -114,6 +116,7 @@ def chat_finish(payload: FinishRequest, db: Session = Depends(get_db)):
         url = publish_to_confluence(title, content_html)
     except Exception:
         url = None
+
     doc = db.query(RequirementDocument).filter(RequirementDocument.session_id == sid).one_or_none()
     if not doc:
         doc = RequirementDocument(session_id=sid)
@@ -146,7 +149,12 @@ def get_document(session_id: str, db: Session = Depends(get_db)):
     doc = db.query(RequirementDocument).filter(RequirementDocument.session_id == session_id).one_or_none()
     if not doc:
         return {"session_id": session_id, "title": "Бизнес-требования", "content_markdown": "", "confluence_url": None}
-    return {"session_id": session_id, "title": doc.title or "Бизнес-требования", "content_markdown": doc.content_markdown or "", "confluence_url": doc.confluence_url}
+    return {
+        "session_id": session_id,
+        "title": doc.title or "Бизнес-требования",
+        "content_markdown": doc.content_markdown or "",
+        "confluence_url": doc.confluence_url,
+    }
 
 @app.delete("/sessions/{session_id}")
 def delete_session(session_id: str, db: Session = Depends(get_db)):

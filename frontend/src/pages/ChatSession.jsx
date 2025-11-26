@@ -113,7 +113,7 @@ export default function ChatSession({ newSession }){
           <button className="btn" onClick={onSend} disabled={loading}>Отправить</button>
         </div>
       </div>
-      <DocumentPreview sessionId={sessionId} doc={doc} setDoc={(d)=>{ setDoc(d); setToast(d?.confluence_url? 'Опубликовано в Confluence':'Документ сформирован') ; setTimeout(()=>setToast(''),2500) }} />
+      <DocumentPreview sessionId={sessionId} doc={doc} setDoc={(d)=>{ setDoc(d); setToast(d?.confluence_url ? 'Опубликовано в Confluence' : 'Документ сформирован'); setTimeout(()=>setToast(''),2500) }} />
       {sessionId && (
         <button className="fab" onClick={()=>setConfirmOpen(true)}>Завершить и сгенерировать</button>
       )}
@@ -123,7 +123,7 @@ export default function ChatSession({ newSession }){
           <div className="modal">
             <div style={{fontWeight:600, marginBottom:8}}>Подтвердить генерацию документа</div>
             <div style={{display:'flex',gap:8}}>
-              <button className="btn" onClick={async()=>{ setConfirmOpen(false); const d = await finishDialog(sessionId); setDoc(d); setToast(d?.confluence_url? 'Опубликовано в Confluence':'Документ сформирован'); setTimeout(()=>setToast(''),2500) }}>Сгенерировать</button>
+              <button className="btn" onClick={async()=>{ setConfirmOpen(false); const d = await finishDialog(sessionId); setDoc(d); setToast(d?.confluence_url ? 'Опубликовано в Confluence' : 'Документ сформирован'); setTimeout(()=>setToast(''),2500) }}>Сгенерировать</button>
               <button className="btn secondary" onClick={()=>setConfirmOpen(false)}>Отмена</button>
             </div>
           </div>

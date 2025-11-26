@@ -10,6 +10,8 @@ class SessionContext:
             "scope_out": None,
             "rules": [],
             "kpi": [],
+            "constraints": [],
+            "priorities": [],
             "use_cases": [],
             "user_stories": [],
             "leading_indicators": [],
@@ -17,7 +19,7 @@ class SessionContext:
         self.meta = meta or { k: {"confidence": 0.0, "updated": None} for k in self.slots.keys() }
 
     def is_complete(self) -> bool:
-        required = ["goal", "description", "scope_in", "rules", "kpi"]
+        required = ["goal", "description", "scope_in", "rules", "kpi", "constraints", "priorities"]
         for k in required:
             v = self.slots.get(k)
             if v is None:
@@ -28,10 +30,11 @@ class SessionContext:
 
     def update(self, delta: Dict):
         for k, v in (delta or {}).items():
-            if k in ["rules", "kpi", "use_cases", "user_stories", "leading_indicators"]:
+            if k in ["rules", "kpi", "use_cases", "user_stories", "leading_indicators", "constraints", "priorities"]:
                 if v:
                     cur = self.slots.get(k) or []
                     if isinstance(v, list):
+                        # Merge lists without duplicates
                         self.slots[k] = list({*cur, *v})
                     else:
                         if v not in cur:
@@ -81,22 +84,28 @@ class SessionContextStore:
 
 def plan_next_question(ctx: SessionContext) -> str:
     if not ctx.slots.get("goal"):
-        return "Какова главная бизнес-цель проекта? Опишите её измеримо."
+        return "Какова главная бизнес-цель проекта? Укажите ключевые метрики успеха."
     if not ctx.slots.get("description"):
-        return "Опишите проблему/возможность: почему инициирован проект и какие боли решаем?"
+        return "Опишите проблему или возможность и поясните, почему проект инициирован сейчас."
     if not ctx.slots.get("scope_in"):
-        return "Что входит в scope? Перечислите функциональные области и процессы."
+        return "Что входит в scope проекта? Назовите основные процессы или системы."
+    if not ctx.slots.get("scope_out"):
+        return "Что не входит в проект? Назовите исключения и соседние процессы."
     if len(ctx.slots.get("rules") or []) == 0:
-        return "Перечислите ключевые бизнес-правила, ограничения и зависимости."
+        return "Перечислите ключевые бизнес-правила или зависимости, которые влияют на проект."
     if len(ctx.slots.get("kpi") or []) == 0:
         return "Назовите KPI с целевыми значениями и периодичностью измерения."
+    if len(ctx.slots.get("constraints") or []) == 0:
+        return "Опишите основные ограничения: нормативы, ресурсы, дедлайны."
+    if len(ctx.slots.get("priorities") or []) == 0:
+        return "Какие приоритеты вы устанавливаете? Что входит в MVP?"
     if len(ctx.slots.get("use_cases") or []) == 0:
-        return "Опишите основной Use Case: актор, предусловия, шаги основного сценария, альтернативы."
+        return "Опишите основной Use Case: актор, предусловия, ключевые шаги."
     if len(ctx.slots.get("user_stories") or []) < 3:
-        return "Сформулируйте не менее 3 User Stories в формате: Как [роль] я хочу [действие], чтобы [ценность]."
+        return "Сформулируйте минимум 3 User Stories в формате: Как [роль] я хочу [действие], чтобы [ценность]."
     if len(ctx.slots.get("leading_indicators") or []) == 0:
-        return "Назовите leading indicators — ранние признаки, что движение к цели успешно."
-    return "Уточните детали, которые считаете важными для полноты документа."
+        return "Назовите ведущие индикаторы — ранние признаки достижения цели."
+    return "Уточните детали, которые нужно зафиксировать, или добавьте риски."
 
 def extract_slots_from_history(history: List[tuple]) -> Dict:
     slots = {}
@@ -126,15 +135,25 @@ def extract_slots_from_history(history: List[tuple]) -> Dict:
             slots["scope_out"] = "; ".join(out_lines)
     rules = []
     kpi = []
+    constraints = []
+    priorities = []
     for l in user_text.splitlines():
         tl = l.strip().lower()
         if tl.startswith("-") or tl.startswith("•"):
             if "kpi" in tl or "показател" in tl:
                 kpi.append(l.strip("-• "))
+            elif "огранич" in tl or "рис" in tl or "зависим" in tl:
+                constraints.append(l.strip("-• "))
+            elif "приор" in tl or "mvp" in tl or "степень важности" in tl:
+                priorities.append(l.strip("-• "))
             else:
                 rules.append(l.strip("-• "))
     if rules:
         slots["rules"] = rules
     if kpi:
         slots["kpi"] = kpi
+    if constraints:
+        slots["constraints"] = constraints
+    if priorities:
+        slots["priorities"] = priorities
     return slots
