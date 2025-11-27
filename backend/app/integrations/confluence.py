@@ -19,13 +19,8 @@ logger = logging.getLogger(__name__)
 def generate_diagram_image_with_gemini(description: str) -> Optional[bytes]:
     """Generate diagram image - try Gemini first, fallback to PIL-based generation."""
     
-    # Reload API key from environment
-    import os
-    from pathlib import Path
-    from dotenv import load_dotenv
-    env_path = Path(__file__).resolve().parent.parent.parent.parent / ".env"
-    load_dotenv(env_path, override=True)
-    api_key = os.getenv("GEMINI_API_KEY")
+    # Берём ключ напрямую из config.py (захардкожен)
+    api_key = GEMINI_API_KEY
     
     # Try Gemini first if API key is available
     if api_key:

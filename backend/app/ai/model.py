@@ -153,17 +153,9 @@ def _format_context(history: List[Tuple[str, str]]) -> str:
 
 class AIModel:
     def __init__(self):
-        # Reload API key from environment with explicit path
-        import os
-        from pathlib import Path
-        from dotenv import load_dotenv
-        
-        # Find .env file
-        env_path = Path(__file__).resolve().parent.parent.parent.parent / ".env"
-        load_dotenv(env_path, override=True)
-        
-        gemini_key = os.getenv("GEMINI_API_KEY")
-        openai_key = os.getenv("OPENAI_API_KEY")
+        # Берём ключи напрямую из config.py (захардкожены)
+        gemini_key = GEMINI_API_KEY
+        openai_key = OPENAI_API_KEY
         logger.info(f"Loading API key: {gemini_key[:20] if gemini_key else 'None'}...")
         
         self.use_gemini = bool(gemini_key)
