@@ -59,12 +59,23 @@ SYSTEM_PROMPT = (
     "5. Если чего-то критически не хватает — задаёшь один умный, короткий вопрос (не более одного раза).\n"
     "6. Умеешь писать документацию с максимально высокой степенью ясности и формализации.\n\n"
     "═══════════════════════════════════════════════════════════════\n"
-    "СТИЛЬ\n"
+    "СТИЛЬ КОММУНИКАЦИИ\n"
     "═══════════════════════════════════════════════════════════════\n"
     "• Чётко, ясно, структурировано.\n"
-    "• Никаких фраз вроде «я думаю» или «возможно».\n"
+    "• Никаких фраз вроде «я думаю», «возможно», «наверное».\n"
     "• Аналитично, уверенно, профессионально.\n"
-    "• Никаких общих рассуждений: только конкретика.\n\n"
+    "• Никаких общих рассуждений: только конкретика.\n"
+    "• Вопросы формулируй развёрнуто и профессионально.\n\n"
+    "ПРИМЕРЫ ПРАВИЛЬНЫХ ВОПРОСОВ:\n"
+    "✓ «Для формирования полного набора бизнес-требований уточните, пожалуйста: "
+    "какие ключевые показатели эффективности (KPI) планируется отслеживать в рамках данного проекта?»\n"
+    "✓ «Для корректного определения scope проекта необходимо уточнить: "
+    "какие подразделения и роли будут задействованы в процессе?»\n"
+    "✓ «Укажите, пожалуйста, целевые значения метрик и сроки их достижения.»\n\n"
+    "ПРИМЕРЫ НЕПРАВИЛЬНЫХ ВОПРОСОВ (НЕ ИСПОЛЬЗОВАТЬ):\n"
+    "✗ «Какие KPI?»\n"
+    "✗ «А что ещё нужно?»\n"
+    "✗ «Расскажите подробнее»\n\n"
     "═══════════════════════════════════════════════════════════════\n"
     "СТРУКТУРА CONFLUENCE-ДОКУМЕНТА\n"
     "═══════════════════════════════════════════════════════════════\n"
@@ -76,8 +87,9 @@ SYSTEM_PROMPT = (
     "6. **Функциональные требования**\n"
     "7. **KPI и метрики успеха**\n"
     "8. **User Stories** (формат: «Как <роль>, я хочу <действие>, чтобы <ценность>»)\n"
-    "9. **Use Case** (Актеры, Предусловия, Постусловия, Основной поток, Альтернативный поток)\n"
-    "10. **Диаграмма процесса** (в формате Mermaid)\n\n"
+    "9. **Use Case** (Актеры, Предусловия, Постусловия, Основной поток, Альтернативный поток)\n\n"
+    "ВАЖНО: НЕ включай диаграммы, flowchart или mermaid код в ответ. "
+    "Диаграмма процесса будет сгенерирована автоматически отдельно.\n\n"
     "═══════════════════════════════════════════════════════════════\n"
     "ФОРМАТ ОТВЕТА (строго валидный JSON)\n"
     "═══════════════════════════════════════════════════════════════\n"
@@ -108,8 +120,7 @@ SYSTEM_PROMPT = (
     "      \"postconditions\": \"постусловия\",\n"
     "      \"main_flow\": [\"шаги\"],\n"
     "      \"alternative_flow\": [\"альтернативы\"]\n"
-    "    }],\n"
-    "    \"process_diagram\": \"mermaid-код диаграммы\"\n"
+    "    }]\n"
     "  },\n"
     "  \"validation\": {\n"
     "    \"is_valid\": true,\n"
@@ -217,8 +228,12 @@ class AIModel:
             "6. **Функциональные требования**\n"
             "7. **KPI и метрики успеха**\n"
             "8. **User Stories** (формат: «Как <роль>, я хочу <действие>, чтобы <ценность>»)\n"
-            "9. **Use Case** (Актеры, Предусловия, Постусловия, Основной поток, Альтернативный поток)\n"
-            "10. **Диаграмма процесса** (в формате ```mermaid```)\n\n"
+            "9. **Use Case** (Актеры, Предусловия, Постусловия, Основной поток, Альтернативный поток)\n\n"
+            "ВАЖНО:\n"
+            "• НЕ включай раздел \"Диаграмма процесса\" в документ.\n"
+            "• НЕ генерируй Mermaid код, flowchart или любые диаграммы.\n"
+            "• Диаграмма будет добавлена отдельно автоматически.\n"
+            "• Документ должен заканчиваться на Use Case.\n\n"
             "ТРЕБОВАНИЯ:\n"
             "• Используй Markdown с заголовками и списками.\n"
             "• Заполняй пробелы логически, используя опыт бизнес-аналитика.\n"
@@ -243,29 +258,81 @@ class AIModel:
     def _parse_json_response(self, text: str) -> Tuple[dict, str]:
         """Extracts JSON from text, returns (dict, remaining_text)"""
         s = text.strip()
+        
+        # Try multiple parsing strategies
+        json_str = None
+        
+        # Strategy 1: Find ```json ... ``` block
         try:
-            # Find JSON block
             start_idx = s.find("```json")
             if start_idx != -1:
                 end_idx = s.find("```", start_idx + 7)
                 if end_idx != -1:
                     json_str = s[start_idx+7:end_idx].strip()
-                    data = json.loads(json_str)
-                    # If the LLM put the reply INSIDE the json, great. 
-                    # If it put text outside, we ignore outside text or append it if 'reply' is missing.
-                    return data, data.get("reply", "")
-            
-            # Try finding raw {}
-            start_idx = s.find("{")
-            end_idx = s.rfind("}")
-            if start_idx != -1 and end_idx > start_idx:
-                json_str = s[start_idx:end_idx+1]
-                data = json.loads(json_str)
-                return data, data.get("reply", "")
-                
         except Exception:
             pass
         
+        # Strategy 2: Find raw JSON object { ... }
+        if not json_str:
+            try:
+                start_idx = s.find("{")
+                if start_idx != -1:
+                    # Find matching closing brace
+                    depth = 0
+                    end_idx = -1
+                    in_string = False
+                    escape_next = False
+                    for i, ch in enumerate(s[start_idx:], start_idx):
+                        if escape_next:
+                            escape_next = False
+                            continue
+                        if ch == '\\':
+                            escape_next = True
+                            continue
+                        if ch == '"' and not escape_next:
+                            in_string = not in_string
+                            continue
+                        if in_string:
+                            continue
+                        if ch == '{':
+                            depth += 1
+                        elif ch == '}':
+                            depth -= 1
+                            if depth == 0:
+                                end_idx = i
+                                break
+                    if end_idx > start_idx:
+                        json_str = s[start_idx:end_idx+1]
+            except Exception:
+                pass
+        
+        # Try to parse JSON
+        if json_str:
+            try:
+                data = json.loads(json_str)
+                reply = data.get("reply", "")
+                # Ensure reply is a string, not the whole JSON
+                if isinstance(reply, str) and reply:
+                    return data, reply
+                # If no reply field but we have data, generate a simple response
+                if data:
+                    return data, "Данные получены. Продолжаем анализ."
+                return data, ""
+            except json.JSONDecodeError:
+                pass
+        
+        # Fallback: if text looks like JSON, don't return it as reply
+        if s.startswith("{") and s.endswith("}"):
+            try:
+                data = json.loads(s)
+                reply = data.get("reply", "")
+                if isinstance(reply, str) and reply:
+                    return data, reply
+                return data, "Обрабатываю ваш запрос..."
+            except json.JSONDecodeError:
+                pass
+        
+        # Fallback: return empty dict and original text (only if it's not JSON-like)
         return {}, s
 
     def _infer_ready(self, current_slots: dict, delta: dict) -> bool:

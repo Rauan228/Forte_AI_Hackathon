@@ -1,9 +1,97 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { sendMessage, finishDialog, getHistory, getDocument } from '../api.js'
+import { sendMessage, finishDialog, getHistory, getDocument, generateDiagram } from '../api.js'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import mermaid from 'mermaid'
+
+// Компонент генерации диаграммы с анимацией
+function DiagramGenerator({ sessionId, onGenerated }) {
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const [imageData, setImageData] = useState(null)
+
+  const handleGenerate = async () => {
+    if (!sessionId) {
+      setError('Нет активной сессии')
+      return
+    }
+    console.log('Starting diagram generation for session:', sessionId)
+    setLoading(true)
+    setError(null)
+    try {
+      const result = await generateDiagram(sessionId)
+      console.log('Diagram generation result:', result)
+      if (result.image_base64) {
+        setImageData(result.image_base64)
+        if (onGenerated) onGenerated(result.image_base64)
+      } else {
+        setError(result.error || 'Не удалось сгенерировать диаграмму')
+      }
+    } catch (e) {
+      console.error('Diagram generation error:', e)
+      setError(`Ошибка при генерации диаграммы: ${e.message}`)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="diagram-generator">
+      <div className="diagram-header">
+        <h4>📊 Диаграмма процесса</h4>
+        <button 
+          className="btn diagram-btn" 
+          onClick={handleGenerate} 
+          disabled={loading}
+        >
+          {loading ? 'Генерация...' : imageData ? 'Обновить' : 'Сгенерировать'}
+        </button>
+      </div>
+      
+      {loading && (
+        <div className="diagram-loading">
+          <div className="diagram-spinner">
+            <div className="spinner-ring"></div>
+            <div className="spinner-ring"></div>
+            <div className="spinner-ring"></div>
+          </div>
+          <p className="loading-text">Генерация диаграммы с помощью AI...</p>
+          <div className="loading-steps">
+            <span className="step active">Анализ данных</span>
+            <span className="step-arrow">→</span>
+            <span className="step">Построение структуры</span>
+            <span className="step-arrow">→</span>
+            <span className="step">Рендеринг</span>
+          </div>
+        </div>
+      )}
+      
+      {error && !loading && (
+        <div className="diagram-error">
+          <span>⚠️ {error}</span>
+        </div>
+      )}
+      
+      {imageData && !loading && (
+        <div className="diagram-result">
+          <img 
+            src={`data:image/png;base64,${imageData}`} 
+            alt="Диаграмма процесса"
+            className="diagram-image"
+          />
+        </div>
+      )}
+      
+      {!imageData && !loading && !error && (
+        <div className="diagram-placeholder">
+          <span>🎨</span>
+          <p>Нажмите кнопку для генерации диаграммы процесса</p>
+        </div>
+      )}
+    </div>
+  )
+}
 
 function ChatBubble({ role, text }){
   const looksLikeMermaid = /\b(graph|flowchart)\s+[A-Za-z]+/.test(text) || text.includes('subgraph') || text.includes('-->')
@@ -158,19 +246,11 @@ function DocumentPreview({ sessionId, doc, setDoc }){
   const docRef = useRef(null)
   const renderMd = useMemo(()=>{
     let m = doc?.content_markdown || ''
-    if (m && !/```\s*mermaid/.test(m)){
-      const pattern = /(graph\s+[A-Za-z]+[\s\S]*?)(?=\n\n|$)|((flowchart)\s+[A-Za-z]+[\s\S]*?)(?=\n\n|$)/ig
-      m = m.replace(pattern, (full)=>{
-        let src = full.replace(/\r/g,'')
-        src = src.replace(/^\s*graph\s+/i, 'flowchart ')
-        if (!src.includes('\n')){
-          src = src.split(';').map(s=>s.trim()).filter(Boolean).join('\n')
-        }
-        src = src.replace(/\bsubgraph\s+([^\n;]+)/gi, (m,g)=>`subgraph ${g}\n`)
-        src = src.replace(/\s+end\s*/gi, '\nend\n')
-        return '```mermaid\n' + src.trim() + '\n```'
-      })
-    }
+    // Remove any mermaid/flowchart code blocks
+    m = m.replace(/```mermaid[\s\S]*?```/g, '')
+    m = m.replace(/flowchart\s+[A-Z]+[\s\S]*?(?=\n\n|$)/gi, '')
+    // Remove "Диаграмма процесса" section if present
+    m = m.replace(/##?\s*\d*\.?\s*Диаграмма процесса[\s\S]*?(?=\n##|$)/gi, '')
     return m
   }, [doc])
   useEffect(()=>{
@@ -224,53 +304,17 @@ function DocumentPreview({ sessionId, doc, setDoc }){
         <ReactMarkdown
           remarkPlugins={[remarkGfm]}
           components={{
-            p({children}){
-              const raw = Array.isArray(children) ? children.map(c => typeof c === 'string' ? c : (c?.props?.children ?? '')).join('') : String(children ?? '')
-              const text = raw.trim()
-              const looksLikeMermaid = /\b(graph|flowchart)\s+\w+/.test(text) || text.includes('subgraph') || text.includes('-->')
-              if (looksLikeMermaid){
-                const m = text.match(/(graph\s+[A-Za-z]+[\s\S]*)|(flowchart\s+[A-Za-z]+[\s\S]*)/i)
-                return <MermaidBlock code={(m ? m[0] : text)} />
-              }
-              return <p>{children}</p>
-            },
-            li({children}){
-              const raw = Array.isArray(children) ? children.map(c => typeof c === 'string' ? c : (c?.props?.children ?? '')).join('') : String(children ?? '')
-              const text = raw.trim()
-              const looksLikeMermaid = /\b(graph|flowchart)\s+\w+/.test(text) || text.includes('subgraph') || text.includes('-->')
-              if (looksLikeMermaid){
-                const m = text.match(/(graph\s+[A-Za-z]+[\s\S]*)|(flowchart\s+[A-Za-z]+[\s\S]*)/i)
-                return <MermaidBlock code={(m ? m[0] : text)} />
-              }
-              return <li>{children}</li>
-            },
-            pre({children}){
-              const child = Array.isArray(children) ? children[0] : children
-              const className = child?.props?.className || ''
-              const raw = child?.props?.children
-              const codeText = Array.isArray(raw) ? raw.join('') : String(raw ?? '')
-              const match = /language-(\w+)/.exec(className)
-              const looksLikeMermaid = /\b(graph|flowchart)\s+\w+/.test(codeText) || codeText.includes('subgraph') || codeText.includes('-->')
-              if ((match && match[1] === 'mermaid') || looksLikeMermaid){
-                return <MermaidBlock code={codeText} />
-              }
-              return <pre>{children}</pre>
-            },
-            code({inline, className, children, ...props}){
-              const txt = Array.isArray(children) ? children.join('') : String(children)
-              const clean = txt.replace(/\n$/, '')
-              const match = /language-(\w+)/.exec(className || '')
-              if (!inline && match && match[1] === 'mermaid'){
-                return <MermaidBlock code={clean} />
-              }
-              return <pre><code className={className}>{children}</code></pre>
-            }
+            // Don't render mermaid diagrams - they will be generated separately
           }}
         >
           {renderMd}
         </ReactMarkdown>
       </div>
-      <div style={{display:'flex',gap:8}}>
+      
+      {/* Генератор диаграммы */}
+      <DiagramGenerator sessionId={sessionId} />
+      
+      <div style={{display:'flex',gap:8,marginTop:16}}>
         <button className="btn" onClick={onExport}>Экспорт в Confluence</button>
         <button className="btn secondary" onClick={onPdf}>Скачать PDF</button>
       </div>

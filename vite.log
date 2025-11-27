@@ -2,9 +2,20 @@
 > ai-ba-frontend@0.1.0 dev
 > vite --host 0.0.0.0 --port 5173
 
-Re-optimizing dependencies because lockfile has changed
 
-  VITE v5.4.8  ready in 162 ms
+  VITE v5.4.8  ready in 245 ms
 
   ➜  Local:   http://localhost:5173/
   ➜  Network: http://192.168.0.107:5173/
+5:05:24 PM [vite] page reload src/api.js
+5:05:43 PM [vite] page reload src/pages/ChatSession.jsx
+5:06:00 PM [vite] page reload src/pages/ChatSession.jsx
+5:06:22 PM [vite] hmr update /src/styles.css
+5:07:02 PM [vite] page reload src/api.js
+5:07:02 PM [vite] page reload src/pages/ChatSession.jsx
+5:07:02 PM [vite] hmr update /src/styles.css
+5:13:31 PM [vite] page reload src/pages/ChatSession.jsx
+5:13:59 PM [vite] page reload src/pages/ChatSession.jsx
+5:19:20 PM [vite] page reload src/pages/ChatSession.jsx
+5:19:38 PM [vite] page reload src/pages/ChatSession.jsx
+5:20:07 PM [vite] page reload src/pages/ChatSession.jsx

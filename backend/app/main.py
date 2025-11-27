@@ -164,3 +164,57 @@ def delete_session(session_id: str, db: Session = Depends(get_db)):
         db.commit()
     return {"deleted": True}
 
+
+@app.post("/diagram/generate")
+def generate_diagram(payload: dict, db: Session = Depends(get_db)):
+    """Generate a process diagram image using Gemini API."""
+    session_id = payload.get("session_id")
+    if not session_id:
+        return {"error": "session_id required", "image_base64": None}
+    
+    store = SessionContextStore(db)
+    ctx = store.get(session_id)
+    
+    # Build description for diagram from slots
+    slots = ctx.slots
+    description_parts = []
+    
+    if slots.get("title"):
+        description_parts.append(f"Проект: {slots['title']}")
+    if slots.get("goal"):
+        description_parts.append(f"Цель: {slots['goal']}")
+    if slots.get("description"):
+        description_parts.append(f"Описание: {slots['description']}")
+    
+    # Add use cases flow
+    use_cases = slots.get("use_cases", [])
+    if use_cases:
+        for uc in use_cases:
+            if isinstance(uc, dict):
+                name = uc.get("name", "")
+                main_flow = uc.get("main_flow", [])
+                if name and main_flow:
+                    description_parts.append(f"Use Case '{name}': {' -> '.join(main_flow[:5])}")
+    
+    # Add KPIs if available
+    kpis = slots.get("kpi", [])
+    if kpis:
+        description_parts.append(f"KPI: {', '.join(kpis[:3])}")
+    
+    if not description_parts:
+        return {"error": "No data to generate diagram", "image_base64": None}
+    
+    description = "\n".join(description_parts)
+    
+    # Generate diagram using Gemini
+    from .integrations.confluence import generate_diagram_image_with_gemini
+    import base64
+    
+    image_bytes = generate_diagram_image_with_gemini(description)
+    
+    if image_bytes:
+        image_base64 = base64.b64encode(image_bytes).decode('utf-8')
+        return {"image_base64": image_base64, "error": None}
+    
+    return {"error": "Failed to generate diagram", "image_base64": None}
+
