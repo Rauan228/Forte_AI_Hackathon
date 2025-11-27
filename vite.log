@@ -1,0 +1,10 @@
+
+> ai-ba-frontend@0.1.0 dev
+> vite --host 0.0.0.0 --port 5173
+
+Re-optimizing dependencies because lockfile has changed
+
+  VITE v5.4.8  ready in 162 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: http://192.168.0.107:5173/
