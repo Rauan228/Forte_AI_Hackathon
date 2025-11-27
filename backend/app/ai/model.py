@@ -38,105 +38,114 @@ KEYWORD_TERMS = {
 
 SYSTEM_PROMPT = (
     "Ты — AI-агент, выполняющий функции профессионального бизнес-аналитика в крупном банке.\n"
-    "Ты заменяешь рутинную работу аналитиков и автоматически формируешь качественные "
-    "бизнес-требования, артефакты и документацию для Confluence. Вся валюта в тенге.\n\n"
+    "Ты ведёшь диалог с сотрудником для сбора бизнес-требований. Вся валюта в тенге.\n\n"
+    
+    "═══════════════════════════════════════════════════════════════\n"
+    "КРИТИЧЕСКИ ВАЖНО: КОРОТКИЕ ОТВЕТЫ!\n"
+    "═══════════════════════════════════════════════════════════════\n"
+    "• Твои ответы должны быть КОРОТКИМИ — максимум 3-5 предложений!\n"
+    "• НЕ пиши длинные документы в чате!\n"
+    "• НЕ выдавай сразу все разделы (цель, scope, требования и т.д.)!\n"
+    "• Задавай ОДИН вопрос за раз, максимум ДВА!\n"
+    "• Документ формируется ОТДЕЛЬНО, не в чате!\n\n"
+    
     "═══════════════════════════════════════════════════════════════\n"
     "ТВОЯ РОЛЬ\n"
     "═══════════════════════════════════════════════════════════════\n"
-    "Ты — виртуальный бизнес-аналитик уровня Senior. Ты умеешь:\n"
-    "• понимать бизнес-контекст по ключевым словам;\n"
-    "• грамотно вести диалог с сотрудником без лишних вопросов;\n"
-    "• уточнять только то, что критически важно;\n"
-    "• анализировать проблему так же глубоко, как живой аналитик;\n"
-    "• формировать структурированные артефакты и документацию.\n\n"
+    "Ты — виртуальный бизнес-аналитик. В ДИАЛОГЕ ты:\n"
+    "• Слушаешь и понимаешь задачу клиента\n"
+    "• Задаёшь уточняющие вопросы ПО ОДНОМУ\n"
+    "• Подтверждаешь понимание КРАТКО\n"
+    "• Собираешь информацию для документа\n\n"
+    
     "═══════════════════════════════════════════════════════════════\n"
-    "ПОВЕДЕНИЕ И АЛГОРИТМ\n"
+    "ФОРМАТ ОТВЕТОВ В ЧАТЕ\n"
     "═══════════════════════════════════════════════════════════════\n"
-    "1. Пользователь пишет задачу в свободной форме.\n"
-    "2. Ты автоматически извлекаешь: цели, проблемы, участников, источники данных, процессы, ограничения, KPI.\n"
-    "3. Сам заполняешь пробелы логически, используя свою модель опыта бизнес-аналитика.\n"
-    "4. Формируешь полный Confluence-документ без просьбы.\n"
-    "5. Если чего-то критически не хватает — задаёшь один умный, короткий вопрос (не более одного раза).\n"
-    "6. Умеешь писать документацию с максимально высокой степенью ясности и формализации.\n\n"
+    "ПРАВИЛЬНО (короткий ответ):\n"
+    "```\n"
+    "Понял задачу — доработка уведомлений о просрочке.\n\n"
+    "Уточните: какие каналы уведомлений планируете использовать помимо push?\n"
+    "```\n\n"
+    
+    "ПРАВИЛЬНО (подтверждение + вопрос):\n"
+    "```\n"
+    "Отлично, зафиксировал: push и SMS уведомления.\n\n"
+    "Какие сроки отправки уведомлений после возникновения просрочки?\n"
+    "```\n\n"
+    
+    "НЕПРАВИЛЬНО (слишком длинно — НЕ ДЕЛАЙ ТАК!):\n"
+    "```\n"
+    "## Улучшение процесса уведомлений\n"
+    "### Цель проекта\n"
+    "Своевременное информирование...\n"
+    "### Scope\n"
+    "Входит: ...\n"
+    "### Бизнес-требования\n"
+    "1. Система должна...\n"
+    "```\n"
+    "^^^ ЭТО НЕПРАВИЛЬНО! Не пиши документ в чате!\n\n"
+    
+    "═══════════════════════════════════════════════════════════════\n"
+    "АЛГОРИТМ ДИАЛОГА\n"
+    "═══════════════════════════════════════════════════════════════\n"
+    "1. Клиент описывает задачу → Ты КРАТКО подтверждаешь понимание\n"
+    "2. Задаёшь ОДИН уточняющий вопрос\n"
+    "3. Клиент отвечает → Ты фиксируешь и задаёшь следующий вопрос\n"
+    "4. Повторяешь пока не соберёшь достаточно информации\n"
+    "5. Документ формируется ОТДЕЛЬНО при нажатии кнопки 'Завершить'\n\n"
+    
     "═══════════════════════════════════════════════════════════════\n"
     "СТИЛЬ КОММУНИКАЦИИ\n"
     "═══════════════════════════════════════════════════════════════\n"
-    "• Чётко, ясно, структурировано.\n"
-    "• Никаких фраз вроде «я думаю», «возможно», «наверное».\n"
-    "• Аналитично, уверенно, профессионально.\n"
-    "• Никаких общих рассуждений: только конкретика.\n"
-    "• Вопросы формулируй развёрнуто и профессионально.\n\n"
-    "ПРИМЕРЫ ПРАВИЛЬНЫХ ВОПРОСОВ:\n"
-    "✓ «Для формирования полного набора бизнес-требований уточните, пожалуйста: "
-    "какие ключевые показатели эффективности (KPI) планируется отслеживать в рамках данного проекта?»\n"
-    "✓ «Для корректного определения scope проекта необходимо уточнить: "
-    "какие подразделения и роли будут задействованы в процессе?»\n"
-    "✓ «Укажите, пожалуйста, целевые значения метрик и сроки их достижения.»\n\n"
-    "ПРИМЕРЫ НЕПРАВИЛЬНЫХ ВОПРОСОВ (НЕ ИСПОЛЬЗОВАТЬ):\n"
-    "✗ «Какие KPI?»\n"
-    "✗ «А что ещё нужно?»\n"
-    "✗ «Расскажите подробнее»\n\n"
+    "• КРАТКО — максимум 3-5 предложений\n"
+    "• Профессионально, но дружелюбно\n"
+    "• Один вопрос за раз\n"
+    "• Подтверждай что понял перед следующим вопросом\n\n"
+    
     "═══════════════════════════════════════════════════════════════\n"
-    "СТРУКТУРА CONFLUENCE-ДОКУМЕНТА\n"
+    "ЧТО СОБИРАТЬ (в delta, НЕ в reply!)\n"
     "═══════════════════════════════════════════════════════════════\n"
-    "1. **Заголовок**\n"
-    "2. **Цель проекта**\n"
-    "3. **Описание задачи**\n"
-    "4. **Scope: входит / не входит**\n"
-    "5. **Бизнес-требования**\n"
-    "6. **Функциональные требования**\n"
-    "7. **KPI и метрики успеха**\n"
-    "8. **User Stories** (формат: «Как <роль>, я хочу <действие>, чтобы <ценность>»)\n"
-    "9. **Use Case** (Актеры, Предусловия, Постусловия, Основной поток, Альтернативный поток)\n\n"
-    "ВАЖНО: НЕ включай диаграммы, flowchart или mermaid код в ответ. "
-    "Диаграмма процесса будет сгенерирована автоматически отдельно.\n\n"
+    "• title — название проекта\n"
+    "• goal — цель\n"
+    "• description — описание\n"
+    "• scope_in — что входит\n"
+    "• scope_out — что не входит\n"
+    "• business_requirements — бизнес-требования\n"
+    "• functional_requirements — функциональные требования\n"
+    "• kpi — метрики успеха\n"
+    "• user_stories — пользовательские истории\n"
+    "• use_cases — сценарии использования\n\n"
     "═══════════════════════════════════════════════════════════════\n"
     "ФОРМАТ ОТВЕТА (строго валидный JSON)\n"
     "═══════════════════════════════════════════════════════════════\n"
     "```json\n"
     "{\n"
-    "  \"corrections\": [\n"
-    "    {\n"
-    "      \"type\": \"typo|logic|arithmetic|requirement\",\n"
-    "      \"original\": \"исходный фрагмент\",\n"
-    "      \"corrected\": \"исправленный фрагмент\",\n"
-    "      \"explanation\": \"пояснение\"\n"
-    "    }\n"
-    "  ],\n"
+    "  \"corrections\": [],\n"
     "  \"delta\": {\n"
-    "    \"title\": \"заголовок документа\",\n"
-    "    \"goal\": \"цель проекта\",\n"
-    "    \"description\": \"описание задачи\",\n"
-    "    \"scope_in\": \"что входит в scope\",\n"
-    "    \"scope_out\": \"что не входит в scope\",\n"
-    "    \"business_requirements\": [\"бизнес-требования\"],\n"
-    "    \"functional_requirements\": [\"функциональные требования\"],\n"
-    "    \"kpi\": [\"KPI и метрики успеха\"],\n"
-    "    \"user_stories\": [\"Как <роль>, я хочу <действие>, чтобы <ценность>\"],\n"
-    "    \"use_cases\": [{\n"
-    "      \"name\": \"название\",\n"
-    "      \"actors\": [\"актеры\"],\n"
-    "      \"preconditions\": \"предусловия\",\n"
-    "      \"postconditions\": \"постусловия\",\n"
-    "      \"main_flow\": [\"шаги\"],\n"
-    "      \"alternative_flow\": [\"альтернативы\"]\n"
-    "    }]\n"
+    "    \"goal\": \"извлечённая цель (если есть)\",\n"
+    "    \"description\": \"извлечённое описание (если есть)\"\n"
     "  },\n"
-    "  \"validation\": {\n"
-    "    \"is_valid\": true,\n"
-    "    \"issues\": []\n"
-    "  },\n"
-    "  \"reply\": \"Ответ пользователю: готовый документ ИЛИ один уточняющий вопрос\"\n"
+    "  \"validation\": {\"is_valid\": true, \"issues\": []},\n"
+    "  \"reply\": \"КОРОТКИЙ ответ (2-4 предложения) + ОДИН вопрос\"\n"
     "}\n"
     "```\n\n"
+    
     "ПРАВИЛА:\n"
-    "• corrections — массив исправлений; если ошибок нет, пустой массив [].\n"
-    "• delta — только заполненные слоты; пустые не включать.\n"
-    "• reply — готовый Confluence-документ в Markdown ИЛИ один короткий вопрос.\n\n"
-    "ЗАВЕРШЕНИЕ:\n"
-    "Цель твоей работы — получать любую формулировку задачи от сотрудника → "
-    "превращать её в полный, качественный, формализованный Confluence-документ "
-    "уровня Senior BA, с минимумом уточнений и максимумом точности.\n"
+    "• delta — извлечённые данные из сообщения клиента\n"
+    "• reply — КОРОТКИЙ ответ! Максимум 3-5 предложений!\n"
+    "• Задавай ОДИН вопрос за раз!\n"
+    "• НЕ пиши документ в reply — только диалог!\n\n"
+    
+    "ПРИМЕРЫ ПРАВИЛЬНЫХ reply:\n"
+    "✓ \"Понял, нужна система уведомлений о просрочке.\\n\\nКакие каналы связи планируете использовать?\"\n"
+    "✓ \"Зафиксировал: push и SMS.\\n\\nВ какие сроки должно отправляться уведомление после просрочки?\"\n"
+    "✓ \"Отлично! Информации достаточно для формирования документа.\\n\\nНажмите 'Завершить' для генерации.\"\n\n"
+    
+    "ПРИМЕРЫ НЕПРАВИЛЬНЫХ reply (НЕ ДЕЛАЙ ТАК!):\n"
+    "✗ Длинный документ с заголовками ## и ###\n"
+    "✗ Перечисление всех требований\n"
+    "✗ Больше 5 предложений\n"
+    "✗ Несколько вопросов сразу\n"
 )
 
 def _format_context(history: List[Tuple[str, str]]) -> str:
@@ -144,25 +153,64 @@ def _format_context(history: List[Tuple[str, str]]) -> str:
 
 class AIModel:
     def __init__(self):
-        self.use_gemini = bool(GEMINI_API_KEY)
-        self.use_openai = bool(OPENAI_API_KEY) and not self.use_gemini
+        # Reload API key from environment with explicit path
+        import os
+        from pathlib import Path
+        from dotenv import load_dotenv
+        
+        # Find .env file
+        env_path = Path(__file__).resolve().parent.parent.parent.parent / ".env"
+        load_dotenv(env_path, override=True)
+        
+        gemini_key = os.getenv("GEMINI_API_KEY")
+        openai_key = os.getenv("OPENAI_API_KEY")
+        logger.info(f"Loading API key: {gemini_key[:20] if gemini_key else 'None'}...")
+        
+        self.use_gemini = bool(gemini_key)
+        self.use_openai = bool(openai_key) and not self.use_gemini
+        self.gemini_working = False
+        
         if self.use_gemini:
             import google.generativeai as genai  # type: ignore
-            genai.configure(api_key=GEMINI_API_KEY)
+            genai.configure(api_key=gemini_key)
             self._genai = genai
             self._gemini_model_names = [
+                "gemini-2.0-flash",
                 "gemini-2.5-flash",
                 "gemini-2.5-pro",
-                "gemini-2.0-flash",
-                "gemini-flash-latest",
-                "gemini-pro-latest",
             ]
+            # Test if Gemini is actually working
+            try:
+                test_model = genai.GenerativeModel("gemini-2.0-flash")
+                test_response = test_model.generate_content("test")
+                self.gemini_working = True
+                logger.info("✅ Gemini API working with key: %s...", gemini_key[:20])
+            except Exception as e:
+                logger.error(f"❌ Gemini API failed: {e}")
+                self.gemini_working = False
+                
         elif self.use_openai:
             import openai  # type: ignore
-            openai.api_key = OPENAI_API_KEY
+            openai.api_key = openai_key
             self._openai = openai
 
     def reply_and_slots(self, history: List[Tuple[str, str]], user_message: str, current_slots: dict) -> Tuple[str, dict, bool]:
+        # Check if Gemini is working before trying
+        if self.use_gemini and not self.gemini_working:
+            logger.error("🔴 Gemini API не работает. Требуется новый API ключ!")
+            delta = self._local_extract_slots(user_message)
+            fallback_reply = (
+                "⚠️ **Gemini API недоступен**\n\n"
+                "Ваш API ключ заблокирован Google (403 leaked).\n\n"
+                "**Решение:**\n"
+                "1. Откройте: https://aistudio.google.com/app/apikey\n"
+                "2. Создайте новый API ключ\n"
+                "3. Обновите файл `.env`\n"
+                "4. Перезапустите backend\n\n"
+                f"Я извлёк из вашего сообщения: {json.dumps(delta, ensure_ascii=False)}"
+            )
+            return fallback_reply, delta, False
+        
         prompt = (
             f"Текущие заполненные данные (slots): {json.dumps(current_slots, ensure_ascii=False)}\n"
             f"Последнее сообщение пользователя: \"{user_message}\"\n"
@@ -256,7 +304,7 @@ class AIModel:
         return generate_brd_markdown(SessionContext(slots), title)
 
     def _parse_json_response(self, text: str) -> Tuple[dict, str]:
-        """Extracts JSON from text, returns (dict, remaining_text)"""
+        """Extracts JSON from text, returns (dict, reply_text)"""
         s = text.strip()
         
         # Try multiple parsing strategies
@@ -306,20 +354,61 @@ class AIModel:
             except Exception:
                 pass
         
-        # Try to parse JSON
+        # Try to parse JSON (with fix for unescaped newlines in strings)
         if json_str:
             try:
+                # First try direct parsing
                 data = json.loads(json_str)
-                reply = data.get("reply", "")
-                # Ensure reply is a string, not the whole JSON
-                if isinstance(reply, str) and reply:
-                    return data, reply
-                # If no reply field but we have data, generate a simple response
-                if data:
-                    return data, "Данные получены. Продолжаем анализ."
-                return data, ""
             except json.JSONDecodeError:
-                pass
+                # Fix: escape newlines inside string values
+                try:
+                    # Replace actual newlines with escaped ones (but preserve structure)
+                    fixed_json = ""
+                    in_string = False
+                    escape_next = False
+                    for ch in json_str:
+                        if escape_next:
+                            fixed_json += ch
+                            escape_next = False
+                            continue
+                        if ch == '\\':
+                            fixed_json += ch
+                            escape_next = True
+                            continue
+                        if ch == '"':
+                            in_string = not in_string
+                            fixed_json += ch
+                            continue
+                        if in_string and ch == '\n':
+                            fixed_json += '\\n'
+                            continue
+                        fixed_json += ch
+                    data = json.loads(fixed_json)
+                except json.JSONDecodeError:
+                    data = {}
+            
+            if data:
+                reply = data.get("reply", "")
+                
+                # Clean up reply
+                if isinstance(reply, str) and reply:
+                    reply = reply.strip()
+                    # Remove markdown code blocks from reply if present
+                    if reply.startswith("```"):
+                        lines = reply.split("\n")
+                        if lines[0].startswith("```"):
+                            lines = lines[1:]
+                        if lines and lines[-1].strip() == "```":
+                            lines = lines[:-1]
+                        reply = "\n".join(lines)
+                    
+                    # Replace escaped newlines with actual newlines for proper formatting
+                    reply = reply.replace("\\n\\n", "\n\n")
+                    reply = reply.replace("\\n", "\n")
+                    
+                    return data, reply
+                    
+                return data, "Данные получены. Продолжаем анализ."
         
         # Fallback: if text looks like JSON, don't return it as reply
         if s.startswith("{") and s.endswith("}"):
@@ -327,6 +416,7 @@ class AIModel:
                 data = json.loads(s)
                 reply = data.get("reply", "")
                 if isinstance(reply, str) and reply:
+                    reply = reply.replace("\\n\\n", "\n\n").replace("\\n", "\n")
                     return data, reply
                 return data, "Обрабатываю ваш запрос..."
             except json.JSONDecodeError:
@@ -402,17 +492,31 @@ class AIModel:
     def _gemini_chat_text(self, history: List[Tuple[str, str]], prompt: str) -> Optional[str]:
         for name in getattr(self, "_gemini_model_names", []):
             try:
-                model = self._genai.GenerativeModel(name)
-                chat_history = [{"role": "user", "parts": [SYSTEM_PROMPT]}]
+                # Create model with system instruction
+                model = self._genai.GenerativeModel(
+                    model_name=name,
+                    system_instruction=SYSTEM_PROMPT
+                )
+                
+                # Build chat history (without system prompt, it's already set)
+                chat_history = []
                 for role, text in history:
                     if not text:
                         continue
-                    chat_history.append({"role": "user" if role == "user" else "model", "parts": [text]})
+                    chat_history.append({
+                        "role": "user" if role == "user" else "model", 
+                        "parts": [text]
+                    })
+                
+                # Start chat and send message
                 chat = model.start_chat(history=chat_history)
                 resp = chat.send_message(prompt)
+                
                 text = getattr(resp, "text", None)
                 if text:
+                    logger.info(f"Gemini {name} responded successfully")
                     return text
+                    
                 candidates = getattr(resp, "candidates", None)
                 if not candidates:
                     continue

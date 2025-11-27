@@ -19,14 +19,22 @@ logger = logging.getLogger(__name__)
 def generate_diagram_image_with_gemini(description: str) -> Optional[bytes]:
     """Generate diagram image - try Gemini first, fallback to PIL-based generation."""
     
+    # Reload API key from environment
+    import os
+    from pathlib import Path
+    from dotenv import load_dotenv
+    env_path = Path(__file__).resolve().parent.parent.parent.parent / ".env"
+    load_dotenv(env_path, override=True)
+    api_key = os.getenv("GEMINI_API_KEY")
+    
     # Try Gemini first if API key is available
-    if GEMINI_API_KEY:
+    if api_key:
         try:
             import google.generativeai as genai
-            genai.configure(api_key=GEMINI_API_KEY)
+            genai.configure(api_key=api_key)
             
-            # Try different model names
-            for model_name in ['gemini-1.5-pro', 'gemini-pro', 'models/gemini-pro']:
+            # Try different model names (updated for current API)
+            for model_name in ['gemini-2.0-flash', 'gemini-2.5-flash', 'gemini-2.5-pro']:
                 try:
                     model = genai.GenerativeModel(model_name)
                     
@@ -42,16 +50,17 @@ def generate_diagram_image_with_gemini(description: str) -> Optional[bytes]:
 - Логическая последовательность: от начала до конца
 - Шаги должны быть конкретными и понятными
 - На русском языке
+- Включи: инициацию, анализ, разработку, внедрение, мониторинг
 
-Пример:
-Начало процесса
+Пример формата ответа:
+Инициация проекта
+Анализ текущего состояния
 Сбор требований
-Анализ данных
 Разработка решения
 Тестирование
 Внедрение
 Мониторинг результатов
-Завершение"""
+Завершение проекта"""
 
                     response = model.generate_content(prompt)
                     steps_text = response.text.strip()
@@ -63,15 +72,16 @@ def generate_diagram_image_with_gemini(description: str) -> Optional[bytes]:
                         # Remove numbering if present
                         line = re.sub(r'^\d+[\.\)]\s*', '', line)
                         line = re.sub(r'^[-*•]\s*', '', line)
-                        if line and len(line) > 3:
+                        line = re.sub(r'^\*\*.*?\*\*:?\s*', '', line)  # Remove **bold** prefixes
+                        if line and len(line) > 3 and len(line) < 80:
                             steps.append(line[:60])
                     
-                    if steps:
+                    if len(steps) >= 4:
                         logger.info(f"Gemini generated {len(steps)} steps using {model_name}")
-                        return _generate_diagram_image(steps, f"Диаграмма процесса (AI-generated)")
+                        return _generate_diagram_image(steps[:8], "Диаграмма бизнес-процесса")
                     
                 except Exception as e:
-                    logger.debug(f"Model {model_name} failed: {e}")
+                    logger.warning(f"Model {model_name} failed: {e}")
                     continue
                     
         except Exception as exc:
@@ -387,6 +397,87 @@ def publish_to_confluence(title: str, html: str) -> Optional[str]:
         # Upload diagram image as attachment
         if diagram_image and page_id:
             upload_attachment_to_confluence(page_id, "process_diagram.png", diagram_image)
+            
+    except Exception as exc:
+        logger.error("Confluence publish failed: %s", exc)
+        if hasattr(exc, "response") and exc.response is not None:
+            logger.error("Response: %s", exc.response.text)
+        return None
+
+    link = js.get("_links", {}).get("webui")
+    if link and CONFLUENCE_URL:
+        return f"{CONFLUENCE_URL}{link}"
+    return None
+
+
+def publish_to_confluence_with_diagram(title: str, html: str, diagram_image: Optional[bytes] = None) -> Optional[str]:
+    """Publish to Confluence with a pre-generated diagram image."""
+    if not (CONFLUENCE_URL and CONFLUENCE_EMAIL and CONFLUENCE_API_TOKEN and CONFLUENCE_SPACE_KEY):
+        logger.info("Confluence credentials are not configured; skipping publish.")
+        return None
+
+    auth = (CONFLUENCE_EMAIL, CONFLUENCE_API_TOKEN)
+    headers = {"Content-Type": "application/json"}
+    search_url = f"{CONFLUENCE_URL}/rest/api/content"
+    params = {
+        "title": title,
+        "spaceKey": CONFLUENCE_SPACE_KEY,
+        "expand": "version",
+    }
+
+    try:
+        resp = requests.get(search_url, params=params, auth=auth, headers=headers, timeout=15)
+        resp.raise_for_status()
+        results = resp.json().get("results", [])
+    except Exception as exc:
+        logger.error("Confluence search failed: %s", exc)
+        return None
+
+    # Add diagram section to HTML if we have an image
+    html_to_publish = html
+    if diagram_image:
+        # Add diagram section at the end
+        diagram_section = '''
+<h2>Диаграмма бизнес-процесса</h2>
+<ac:image ac:align="center" ac:layout="center" ac:width="800">
+    <ri:attachment ri:filename="process_diagram.png"/>
+</ac:image>
+'''
+        html_to_publish = html + diagram_section
+
+    data = {
+        "type": "page",
+        "title": title,
+        "space": {"key": CONFLUENCE_SPACE_KEY},
+        "body": {"storage": {"value": html_to_publish, "representation": "storage"}},
+    }
+    if CONFLUENCE_PARENT_PAGE_ID:
+        data["ancestors"] = [{"id": int(CONFLUENCE_PARENT_PAGE_ID)}]
+
+    try:
+        if results:
+            page = results[0]
+            page_id = page["id"]
+            version = page.get("version", {}).get("number", 1) + 1
+            data["version"] = {"number": version}
+            url = f"{CONFLUENCE_URL}/rest/api/content/{page_id}"
+            resp = requests.put(url, json=data, auth=auth, headers=headers, timeout=15)
+            resp.raise_for_status()
+            logger.info("Updated Confluence page '%s' (v%s).", title, version)
+            js = resp.json()
+        else:
+            url = f"{CONFLUENCE_URL}/rest/api/content"
+            resp = requests.post(url, json=data, auth=auth, headers=headers, timeout=15)
+            resp.raise_for_status()
+            logger.info("Created Confluence page '%s'.", title)
+            js = resp.json()
+        
+        page_id = js.get("id")
+        
+        # Upload diagram image as attachment
+        if diagram_image and page_id:
+            upload_attachment_to_confluence(page_id, "process_diagram.png", diagram_image)
+            logger.info("Uploaded diagram to Confluence page %s", page_id)
             
     except Exception as exc:
         logger.error("Confluence publish failed: %s", exc)

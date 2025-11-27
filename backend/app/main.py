@@ -10,7 +10,7 @@ from .ai.model import AIModel
 from .ai.session_logic import SessionContextStore, plan_next_question, extract_slots_from_history
 from .ai.generators import generate_brd_markdown
 from .config import FRONTEND_ORIGIN
-from .integrations.confluence import publish_to_confluence
+from .integrations.confluence import publish_to_confluence, publish_to_confluence_with_diagram
 
 init_db()
 app = FastAPI()
@@ -38,52 +38,53 @@ def health():
 
 @app.post("/chat/message", response_model=ChatReply)
 def chat_message(payload: ChatMessage, db: Session = Depends(get_db)):
+    """
+    Обычный чат с бизнес-аналитиком.
+    НЕ публикует в Confluence - только общение и сбор данных.
+    Публикация происходит через /chat/finish.
+    """
     session_id = payload.session_id or str(uuid.uuid4())
     session = db.get(DialogSession, session_id)
     if not session:
         session = DialogSession(id=session_id)
         db.add(session)
         db.commit()
+    
+    # Сохраняем сообщение пользователя
     db.add(Message(session_id=session_id, sender="user", text=payload.message))
+    
+    # Получаем историю и контекст
     history = [(m.sender, m.text) for m in db.query(Message).filter(Message.session_id == session_id).order_by(Message.timestamp.asc()).all()]
     store = SessionContextStore(db)
     ctx = store.get(session_id)
+    
+    # Получаем ответ от AI и извлекаем слоты
     reply_text, delta, ready = ai.reply_and_slots(history, payload.message, ctx.slots)
+    
+    # Если AI не извлёк слоты, пробуем локально
     if not isinstance(delta, dict) or len(delta.keys()) == 0:
         try:
             delta = ai._local_extract_slots(payload.message)
         except Exception:
             delta = {}
+    
+    # Обновляем контекст
     ctx.update(delta)
     extra = extract_slots_from_history(history)
     if extra:
         ctx.update(extra)
     store.save(session_id, ctx)
+    
+    # Если нет ответа, генерируем следующий вопрос
     if not reply_text:
         reply_text = plan_next_question(ctx)
 
+    # Сохраняем ответ ассистента
     db.add(Message(session_id=session_id, sender="assistant", text=reply_text))
-    finished = False
-    if ctx.is_complete():
-        title = "Бизнес-требования"
-        content_md = ai.generate_document_from_slots(ctx.slots, title)
-        content_html = md.convert(content_md)
-        try:
-            url = publish_to_confluence(title, content_html)
-        except Exception:
-            url = None
-        doc = db.query(RequirementDocument).filter(RequirementDocument.session_id == session_id).one_or_none()
-        if not doc:
-            doc = RequirementDocument(session_id=session_id)
-            db.add(doc)
-        doc.title = title
-        doc.content_markdown = content_md
-        doc.content_html = content_html
-        doc.confluence_url = url
-        session.finished = True
-        finished = True
     db.commit()
-    return {"session_id": session_id, "reply": reply_text, "finished": finished}
+    
+    # Возвращаем ответ (finished всегда False в обычном чате)
+    return {"session_id": session_id, "reply": reply_text, "finished": False}
 
 @app.get("/chat/history/{session_id}", response_model=HistoryResponse)
 def get_history(session_id: str, db: Session = Depends(get_db)):
@@ -92,6 +93,8 @@ def get_history(session_id: str, db: Session = Depends(get_db)):
 
 @app.post("/chat/finish", response_model=DocumentResponse)
 def chat_finish(payload: FinishRequest, db: Session = Depends(get_db)):
+    from .integrations.confluence import generate_diagram_image_with_gemini
+    
     sid = payload.session_id
     if not sid:
         last = db.query(DialogSession).order_by(DialogSession.started_at.desc()).first()
@@ -105,15 +108,26 @@ def chat_finish(payload: FinishRequest, db: Session = Depends(get_db)):
     title = payload.title or "Бизнес-требования"
     store = SessionContextStore(db)
     ctx = store.get(sid)
-    content_md = ai.generate_document_from_slots(ctx.slots, title)
+    slots = ctx.slots
+    
+    # Generate document content
+    content_md = ai.generate_document_from_slots(slots, title)
     if not content_md:
         content_md = generate_brd_markdown(ctx, title)
     try:
         content_html = md.convert(content_md)
     except Exception:
         content_html = md.convert(str(content_md or ""))
+    
+    # Generate diagram description from slots
+    diagram_description = _build_diagram_description(slots)
+    diagram_image = None
+    if diagram_description:
+        diagram_image = generate_diagram_image_with_gemini(diagram_description)
+    
+    # Publish to Confluence with diagram
     try:
-        url = publish_to_confluence(title, content_html)
+        url = publish_to_confluence_with_diagram(title, content_html, diagram_image)
     except Exception:
         url = None
 
@@ -128,6 +142,45 @@ def chat_finish(payload: FinishRequest, db: Session = Depends(get_db)):
     session.finished = True
     db.commit()
     return {"session_id": sid, "title": title, "content_markdown": content_md, "confluence_url": url}
+
+
+def _build_diagram_description(slots: dict) -> str:
+    """Build description for diagram generation from slots."""
+    parts = []
+    
+    if slots.get("title"):
+        parts.append(f"Проект: {slots['title']}")
+    if slots.get("goal"):
+        parts.append(f"Цель: {slots['goal']}")
+    if slots.get("description"):
+        parts.append(f"Описание: {slots['description']}")
+    
+    # Add business requirements
+    br = slots.get("business_requirements", [])
+    if br:
+        parts.append(f"Бизнес-требования: {', '.join(br[:3])}")
+    
+    # Add functional requirements
+    fr = slots.get("functional_requirements", [])
+    if fr:
+        parts.append(f"Функциональные требования: {', '.join(fr[:3])}")
+    
+    # Add use cases flow
+    use_cases = slots.get("use_cases", [])
+    if use_cases:
+        for uc in use_cases[:2]:
+            if isinstance(uc, dict):
+                name = uc.get("name", "")
+                main_flow = uc.get("main_flow", [])
+                if name and main_flow:
+                    parts.append(f"Use Case '{name}': {' -> '.join(main_flow[:5])}")
+    
+    # Add KPIs
+    kpis = slots.get("kpi", [])
+    if kpis:
+        parts.append(f"KPI: {', '.join(kpis[:3])}")
+    
+    return "\n".join(parts)
 
 @app.get("/context/{session_id}")
 def get_context(session_id: str, db: Session = Depends(get_db)):
