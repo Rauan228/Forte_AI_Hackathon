@@ -288,12 +288,89 @@ class AIModel:
             text = self._openai_generate_text(prompt)
             
         if text:
-            return text
+            try:
+                return self._fill_missing_sections(text, slots, title)
+            except Exception:
+                pass
             
         # Fallback
         from .generators import generate_brd_markdown
         from .session_logic import SessionContext
         return generate_brd_markdown(SessionContext(slots), title)
+
+    def _fill_missing_sections(self, text: str, slots: dict, title: str) -> str:
+        import re
+        from .generators import _normalize_multiline, default_use_cases, default_user_stories, default_leading_indicators
+        s = text
+        goal = (slots.get("goal") or "TBD").strip()
+        description = (slots.get("description") or "TBD").strip()
+        scope_in = _normalize_multiline(slots.get("scope_in"))
+        scope_out = _normalize_multiline(slots.get("scope_out"))
+        kpi = slots.get("kpi") or []
+        use_cases = slots.get("use_cases") or default_use_cases(type("Ctx", (), {"slots": slots})())
+        user_stories = slots.get("user_stories") or default_user_stories(type("Ctx", (), {"slots": slots})())
+        leading = slots.get("leading_indicators") or default_leading_indicators(type("Ctx", (), {"slots": slots})())
+        br = slots.get("business_requirements") or []
+        fr = slots.get("functional_requirements") or []
+
+        def repl_single(header_pattern, value):
+            pattern = re.compile(rf"(##\s*\d*\.?\s*{header_pattern}[^\n]*\n)([\s\S]*?)(?=\n##|$)", re.IGNORECASE)
+            def _r(m):
+                body = m.group(2).strip()
+                if body in ("—", "-", "", "— "):
+                    return m.group(1) + value + "\n"
+                return m.group(0)
+            return pattern.sub(_r, s)
+
+        s = repl_single("Цель проекта", goal)
+        s = repl_single("Описание задачи", description)
+
+        scope_pattern = re.compile(r"(##\s*\d*\.?\s*Scope[\s\S]*?)(?=\n##|$)", re.IGNORECASE)
+        def fix_scope(m):
+            block = m.group(1)
+            def fmt_list(items):
+                return "\n".join([f"- {x}" for x in items]) if items else "- TBD"
+            block = re.sub(r"\*\*Входит\*\*[\s\S]*?(?=\n\*\*|$)", lambda mm: "**Входит**\n" + fmt_list(scope_in) + "\n", block)
+            block = re.sub(r"\*\*Не входит\*\*[\s\S]*?(?=\n\*\*|$)", lambda mm: "**Не входит**\n" + fmt_list(scope_out) + "\n", block)
+            return block
+        s = scope_pattern.sub(fix_scope, s)
+
+        def fix_list_section(header, items):
+            pattern = re.compile(rf"(##\s*\d*\.?\s*{header}[^\n]*\n)([\s\S]*?)(?=\n##|$)", re.IGNORECASE)
+            def _r(m):
+                body = m.group(2).strip()
+                if not body or body in ("—", "-", "— ") or re.fullmatch(r"-\s*TBD(\s*\n?)*", body, re.IGNORECASE):
+                    return m.group(1) + "\n".join([f"- {x}" for x in items]) + "\n"
+                return m.group(0)
+            return pattern.sub(_r, s)
+
+        s = fix_list_section("KPI", kpi)
+        s = fix_list_section("KPI и метрики успеха", kpi)
+        s = fix_list_section("Бизнес-требования", br)
+        s = fix_list_section("Функциональные требования", fr)
+
+        uc_pattern = re.compile(r"(##\s*\d*\.?\s*Сценарии использования[\s\S]*?)(?=\n##|$)", re.IGNORECASE)
+        def fix_uc(m):
+            block = m.group(1)
+            main = "\n".join([f"{i+1}. {x}" for i, x in enumerate(use_cases)])
+            alt = "- " + (use_cases[1] if len(use_cases) > 1 else "Система уточняет данные при ошибках")
+            block = re.sub(r"\*\*Основной сценарий\*\*[\s\S]*?(?=\n\*\*|$)", "**Основной сценарий**\n" + main + "\n", block)
+            block = re.sub(r"\*\*Альтернативы\*\*[\s\S]*?(?=\n##|$)", "**Альтернативы**\n" + alt + "\n", block)
+            return block
+        s = uc_pattern.sub(fix_uc, s)
+
+        us_pattern = re.compile(r"(##\s*\d*\.?\s*Пользовательские истории[^\n]*\n)([\s\S]*?)(?=\n##|$)", re.IGNORECASE)
+        def fix_us(m):
+            body = "\n".join([f"{i+1}. {x}" for i, x in enumerate(user_stories)])
+            return m.group(1) + body + "\n"
+        s = us_pattern.sub(fix_us, s)
+
+        li_pattern = re.compile(r"(##\s*\d*\.?\s*Leading Indicators[^\n]*\n)([\s\S]*?)(?=\n##|$)", re.IGNORECASE)
+        def fix_li(m):
+            body = "\n".join([f"- {x}" for x in leading])
+            return m.group(1) + body + "\n"
+        s = li_pattern.sub(fix_li, s)
+        return s
 
     def _parse_json_response(self, text: str) -> Tuple[dict, str]:
         """Extracts JSON from text, returns (dict, reply_text)"""

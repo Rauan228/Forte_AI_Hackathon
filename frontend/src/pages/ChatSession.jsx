@@ -271,9 +271,18 @@ function DocumentPreview({ sessionId, doc, setDoc }){
   const onPdf = async ()=>{
     const { jsPDF } = await import('jspdf')
     const html2canvas = (await import('html2canvas')).default
-    const element = document.getElementById('doc-markdown')
-    if (!element) return
-    const canvas = await html2canvas(element, { scale: 2, useCORS: true })
+    const docEl = document.getElementById('doc-markdown')
+    if (!docEl) return
+    const style = document.createElement('style')
+    style.id = 'pdf-force-style'
+    style.textContent = `
+      .pdf-export, .pdf-export * { color: #000 !important; background: #fff !important; opacity: 1 !important; filter: none !important; box-shadow: none !important; }
+      .pdf-export h1, .pdf-export h2, .pdf-export h3, .pdf-export h4, .pdf-export h5, .pdf-export h6 { color: #000 !important; }
+      .pdf-export a { color: #000 !important; }
+    `
+    document.head.appendChild(style)
+    docEl.classList.add('pdf-export')
+    const canvas = await html2canvas(docEl, { scale: 2, useCORS: true, backgroundColor: '#ffffff' })
     const pdf = new jsPDF('p','pt','a4')
     const margin = 20
     const pageWidth = pdf.internal.pageSize.getWidth() - margin*2
@@ -294,25 +303,57 @@ function DocumentPreview({ sessionId, doc, setDoc }){
       pageY += pageHeightPx
       if (pageY < canvas.height) pdf.addPage()
     }
+    // Append diagram image on the last page
+    let base64 = null
+    const imgEl = document.querySelector('#doc-content .diagram-image')
+    if (imgEl && imgEl.src && imgEl.src.startsWith('data:image/png;base64,')) {
+      base64 = imgEl.src.replace('data:image/png;base64,','')
+    } else {
+      const res = await generateDiagram(sessionId)
+      if (res && res.image_base64) base64 = res.image_base64
+    }
+    if (base64) {
+      pdf.addPage()
+      const dataUrl = 'data:image/png;base64,' + base64
+      const tempImg = new Image()
+      tempImg.src = dataUrl
+      await new Promise(r => { tempImg.onload = r })
+      const pageW = pdf.internal.pageSize.getWidth()
+      const pageH = pdf.internal.pageSize.getHeight()
+      const margin2 = 20
+      const maxW = pageW - margin2*2
+      const maxH = pageH - margin2*2
+      const r2 = Math.min(maxW / tempImg.width, maxH / tempImg.height)
+      const w = tempImg.width * r2
+      const h = tempImg.height * r2
+      const x = (pageW - w) / 2
+      const y = (pageH - h) / 2
+      pdf.addImage(dataUrl, 'PNG', x, y, w, h, undefined, 'FAST')
+    }
     pdf.save((doc?.title||'document') + '.pdf')
+    docEl.classList.remove('pdf-export')
+    const s = document.getElementById('pdf-force-style')
+    if (s) s.remove()
   }
   return (
     <div className="doc-panel">
       <h3>Итоговый документ</h3>
       {loading && <div className="skeleton"/>}
-      <div id="doc-markdown" ref={docRef} className="markdown-body">
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          components={{
-            // Don't render mermaid diagrams - they will be generated separately
-          }}
-        >
-          {renderMd}
-        </ReactMarkdown>
+      <div id="doc-content">
+        <div id="doc-markdown" ref={docRef} className="markdown-body">
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={{
+              // Don't render mermaid diagrams - they will be generated separately
+            }}
+          >
+            {renderMd}
+          </ReactMarkdown>
+        </div>
+        <DiagramGenerator sessionId={sessionId} />
       </div>
       
       {/* Генератор диаграммы */}
-      <DiagramGenerator sessionId={sessionId} />
       
       <div style={{display:'flex',gap:8,marginTop:16}}>
         <button className="btn" onClick={onExport}>Экспорт в Confluence</button>
