@@ -38,3 +38,12 @@ export async function getDocument(id) {
   return await r.json()
 }
 
+export async function generateDiagram(sessionId) {
+  const r = await fetch(`${BASE}/diagram/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ session_id: sessionId })
+  })
+  return await r.json()
+}
+
